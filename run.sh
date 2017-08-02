@@ -1,0 +1,1 @@
+g++ demo.cpp -o demo -std=c++11
