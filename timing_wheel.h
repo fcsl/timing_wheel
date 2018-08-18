@@ -2,7 +2,7 @@
  * timing_wheel.h
  *
  *  Created on: 2017年8月01日
- *      Author: 高圣易
+ *      Author: gao88
  */
 
 #ifndef TIME_WHEEL_TIMER
