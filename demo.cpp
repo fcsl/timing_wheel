@@ -2,18 +2,20 @@
 #include <unistd.h>
 #include "timing_wheel.h"
 
-int main(int argc,char *argv[]) {
-	timing_wheel *tw = new timing_wheel(5);
+int main(int argc, char *argv[]) {
+  timing_wheel *tw = new timing_wheel(10);
 
-	for(int i=0; i < 100000; i++) {
-		tw->add_timer("1", [i] (const std::string& reqId){
-			printf("i: %d\n", i);
-		});
-	}
+  int i = 0;
+  int j = 1;
+  tw->add_timer("1", 1000,
+                [i](const std::string &reqId) { printf("i: %d\n", i); });
+  tw->add_timer("2", 4000,
+                [j](const std::string &reqId) { printf("j: %d\n", j); });
 
-	tw->run();
+  tw->run();
 
-	sleep(10);
+  sleep(10000);
 
-	return 0;
+  return 0;
+  
 }
