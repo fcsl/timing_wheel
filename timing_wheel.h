@@ -6,13 +6,14 @@
 #include <time.h>
 #include <netinet/in.h>
 #include <sys/select.h>
+#include <vector>
 #include <stdio.h>
 #include <set>
 #include <thread>
 
-class timing_wheel {
+class TimingWheel {
 private:
-  int select_sleep(int ms) {
+  int selectSleep(int ms) {
     struct timeval tv;
     tv.tv_sec = ms / 1000;
     tv.tv_usec = ms % 1000 * 1000;
@@ -26,52 +27,55 @@ private:
   }
 
   /*定时器类*/
-  class tw_timer {
+  class twTimer {
   public:
-    tw_timer(int rot, int interval)
+    twTimer(int rot, int interval)
         : next(NULL), prev(NULL), m_rotation(rot), m_interval(interval) {}
-    ~tw_timer() {}
+    ~twTimer() {}
 
   public:
     int m_rotation; //记录定时器在时间轮转多少圈后生效
     int m_interval; //记录定时器定时间隔
     std::function<void(const std::string &)> func; //定时器回调函数
-    tw_timer *next;
-    tw_timer *prev;
+    twTimer *next;
+    twTimer *prev;
     std::string reqId;
   };
 
 private:
-  static const int N = 100; //时间轮上槽的数据
-  tw_timer *m_slots[N]; //时间轮的槽，其中每个元素指向一个定时器链表
-  int m_curSlot;                       //时间轮的当前槽
-  int m_granularity;                   //最小时间精度
+  std::vector<twTimer *> m_slots; //时间轮的槽，其中每个元素指向一个定时器链表
+  int m_curSlot;                      //时间轮的当前槽
+  int m_granularity;                  //最小时间精度
+  int m_wheelSize;                    //一个时间轮槽位数量
   std::set<std::string> m_cancleSets; //待取消定时器集合
+  std::thread m_thread;
+  volatile bool m_isRuning;
 
 public:
-  timing_wheel(int granularity) {
-    m_curSlot = 0;
-    m_granularity = granularity;
-
-    for (int i = 0; i < N; i++) {
-      m_slots[i] = NULL;
+  TimingWheel(int tickMs, int wheelSize)
+      : m_curSlot(0), m_granularity(tickMs), m_wheelSize(wheelSize),
+        m_isRuning(false) {
+    for (int i = 0; i < m_wheelSize; i++) {
+      m_slots.push_back(nullptr);
     }
   }
 
-  ~timing_wheel() {
-    for (int i = 0; i < N; i++) {
-      tw_timer *tmp = m_slots[i];
+  ~TimingWheel() {
+    m_isRuning = false;
+    m_thread.join();
+    for (twTimer *tmp : m_slots) {
       while (tmp) {
-        m_slots[i] = tmp->next;
+        auto tmp2clear = tmp->next;
         delete tmp;
-        tmp = m_slots[i];
+        tmp = tmp2clear;
       }
     }
+    m_slots.clear();
   }
 
   //根据定时值interval创建一个定时器，并插入它合适的槽中
-  tw_timer *add_timer(const std::string &reqId, bool isfirst, int interval,
-                      std::function<void(const std::string &)> func) {
+  twTimer *AddTimer(const std::string &reqId, bool isfirst, int interval,
+                    std::function<void(const std::string &)> func) {
     if (interval < 0) {
       return NULL;
     }
@@ -84,64 +88,64 @@ public:
     }
 
     //计算待插入的定时器在时间轮转动多少圈后被触发
-    int rotation = ticks / N;
+    int rotation = ticks / m_wheelSize;
     if (isfirst == false) {
       --rotation;
     }
 
     //计算待插入的定时器应该被插入哪个槽中
-    int ts = (m_curSlot + (ticks % N)) % N;
+    int ts = (m_curSlot + (ticks % m_wheelSize)) % m_wheelSize;
 
     //创建新的定时器, 他在时间轮转动rotation圈滞后被触发，且位于第ts个槽上
-    tw_timer *timer = new tw_timer(rotation, interval);
+    twTimer *timer = new twTimer(rotation, interval);
     timer->func = func;
     timer->reqId = reqId;
-    timer->m_interval = interval;
 
     //如果ts个槽中尚无定时器，则把新建的定时器插入其中，并将该定时器设置为该槽的头结点
-    if (!m_slots[ts]) {
-      printf("add timer ,rotation is %d,ts is %d,m_curSlot is %d\n\n", rotation,
-             ts, m_curSlot);
-      m_slots[ts] = timer;
+    if (!m_slots.at(ts)) {
+      m_slots.at(ts) = timer;
     } else { //否则,将定时器插入ts槽中
-      printf("add timer ,rotation is %d,ts is %d,m_curSlot is %d\n\n", rotation,
-             ts, m_curSlot);
-      timer->next = m_slots[ts];
-      m_slots[ts]->prev = timer;
-      m_slots[ts] = timer;
+      timer->next = m_slots.at(ts);
+      m_slots.at(ts)->prev = timer;
+      m_slots.at(ts) = timer;
     }
+    return timer;
   }
 
   //根据reqId删除目标定时器(先标记，等待轮转到目标槽后再真正删除timer节点)
-  void del_timer(const std::string &reqId) { m_cancleSets.insert(reqId); }
+  void DelTimer(const std::string &reqId) {
+    printf("DelTimer %s\n", reqId.c_str());
+    m_cancleSets.insert(reqId);
+  }
 
   //根据链表节点地址删除目标定时器
-  void del_timer(tw_timer *&tmp) {
-    if (tmp == m_slots[m_curSlot]) {
-      m_slots[m_curSlot] = tmp->next;
+  void DelTimer(twTimer *&tmp) {
+    if (tmp == m_slots.at(m_curSlot)) {
+      m_slots.at(m_curSlot) = tmp->next;
       delete tmp;
-      if (m_slots[m_curSlot]) {
-        m_slots[m_curSlot]->prev = NULL;
+      if (m_slots.at(m_curSlot)) {
+        m_slots.at(m_curSlot)->prev = NULL;
       }
-      tmp = m_slots[m_curSlot];
+      tmp = m_slots.at(m_curSlot);
     } else {
       tmp->prev->next = tmp->next;
       if (tmp->next) {
         tmp->next->prev = tmp->prev;
       }
-      tw_timer *tmp2 = tmp->next;
+      twTimer *tmp2 = tmp->next;
       delete tmp;
       tmp = tmp2;
     }
   }
 
   //时间轮执行器
-  void run() {
-    std::thread t([this]() {
-      while (true) {
-        select_sleep(m_granularity);
+  void Run() {
+    m_isRuning = true;
+    m_thread = std::thread([this]() {
+      while (m_isRuning) {
+        selectSleep(m_granularity);
 
-        tw_timer *tmp = m_slots[m_curSlot];
+        twTimer *tmp = m_slots.at(m_curSlot);
         while (tmp) {
           bool isCancle = false;
           if (m_cancleSets.size() > 0) {
@@ -169,21 +173,19 @@ public:
             next_reqId = tmp->reqId;
 
             //删除已经执行过的timer节点
-            del_timer(tmp);
+            DelTimer(tmp);
 
             if (!isCancle) {
               //重新添加下一个timer节点
-              add_timer(next_reqId, false, next_interval, next_func);
+              AddTimer(next_reqId, false, next_interval, next_func);
             }
           }
         }
 
         //更新当前时间轮的槽
-        m_curSlot = ++m_curSlot % N;
+        m_curSlot = ++m_curSlot % m_wheelSize;
       }
     });
-
-    t.detach();
   }
 };
 
