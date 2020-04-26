@@ -7,9 +7,9 @@ int main(int argc, char *argv[]) {
 
   int i = 0;
   int j = 1;
-  tw->add_timer("1", 1000,
+  tw->add_timer("1", true, 1000,
                 [i](const std::string &reqId) { printf("i: %d\n", i); });
-  tw->add_timer("2", 4000,
+  tw->add_timer("2", true, 4000,
                 [j](const std::string &reqId) { printf("j: %d\n", j); });
 
   tw->run();
@@ -17,5 +17,4 @@ int main(int argc, char *argv[]) {
   sleep(10000);
 
   return 0;
-  
 }
