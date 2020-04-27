@@ -11,9 +11,11 @@
 #include <set>
 #include <thread>
 
+#define USING_SELECT_MODE
 class TimingWheel {
 private:
-  int selectSleep(int ms) {
+  int timeSleep(int ms) {
+#ifdef USING_SELECT_MODE
     struct timeval tv;
     tv.tv_sec = ms / 1000;
     tv.tv_usec = ms % 1000 * 1000;
@@ -24,6 +26,9 @@ private:
       }
       select(0, NULL, NULL, NULL, &tv);
     }
+#else
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+#endif
   }
 
   /*定时器类*/
@@ -143,7 +148,7 @@ public:
     m_isRuning = true;
     m_thread = std::thread([this]() {
       while (m_isRuning) {
-        selectSleep(m_granularity);
+        timeSleep(m_granularity);
 
         twTimer *tmp = m_slots.at(m_curSlot);
         while (tmp) {
