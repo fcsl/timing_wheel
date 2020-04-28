@@ -10,23 +10,21 @@ using std::chrono::high_resolution_clock;
 
 class tester {
 private:
-  high_resolution_clock::time_point g_lstTimeOne;
-  high_resolution_clock::time_point g_lstTimeTwo;
-  std::function<void(const std::string &)> m_funcFirst;
-  std::function<void(const std::string &)> m_funcSecond;
+  high_resolution_clock::time_point m_lstTimeOne;
+  high_resolution_clock::time_point m_lstTimeTwo;
   TimingWheel *tw;
 
   void firstCallback(const std::string &reqId) {
     auto nowTime = high_resolution_clock::now();
-    auto time_span = duration_cast<duration<double>>(nowTime - g_lstTimeOne);
-    g_lstTimeOne = nowTime;
+    auto time_span = duration_cast<duration<double>>(nowTime - m_lstTimeOne);
+    m_lstTimeOne = nowTime;
     std::cout << reqId.c_str() << " took me " << time_span.count()
               << "seconds..." << std::endl;
   }
   void secondCallback(const std::string &reqId) {
     auto nowTime = high_resolution_clock::now();
-    auto time_span = duration_cast<duration<double>>(nowTime - g_lstTimeTwo);
-    g_lstTimeTwo = nowTime;
+    auto time_span = duration_cast<duration<double>>(nowTime - m_lstTimeTwo);
+    m_lstTimeTwo = nowTime;
     std::cout << reqId.c_str() << " took me " << time_span.count()
               << "seconds..." << std::endl;
   }

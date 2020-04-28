@@ -191,4 +191,4 @@ public:
   }
 };
 
-#endif
+#endif // TIME_WHEEL_TIMER
