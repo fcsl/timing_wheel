@@ -118,10 +118,7 @@ public:
   }
 
   //根据reqId删除目标定时器(先标记，等待轮转到目标槽后再真正删除timer节点)
-  void DelTimer(const std::string &reqId) {
-    printf("DelTimer %s\n", reqId.c_str());
-    m_cancleSets.insert(reqId);
-  }
+  void DelTimer(const std::string &reqId) { m_cancleSets.insert(reqId); }
 
   //根据链表节点地址删除目标定时器
   void DelTimer(twTimer *&tmp) {
